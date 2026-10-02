@@ -1,0 +1,175 @@
+#include <iostream>
+#include <vector>
+#include <algorithm>
+#include <random>
+#include <chrono>
+#include <fstream>
+#include <cmath>
+
+using namespace std;
+using namespace chrono;
+
+// Busqueda binaria
+bool busquedaBinaria(const vector<int>& arr, int objetivo,
+                     long long& comparaciones) {
+    int izquierda = 0;
+    int derecha = arr.size() - 1;
+
+    while (izquierda <= derecha) {
+        int medio = izquierda + (derecha - izquierda) / 2;
+        comparaciones++;
+
+        if (arr[medio] == objetivo)
+            return true;
+
+        comparaciones++;
+        if (arr[medio] < objetivo)
+            izquierda = medio + 1;
+        else
+            derecha = medio - 1;
+    }
+
+    return false;
+}
+
+// Mezcla de dos mitades ordenadas
+void mezclar(vector<int>& arr, int inicio, int medio, int fin,
+             long long& comparaciones) {
+    vector<int> izquierda(arr.begin() + inicio,
+                          arr.begin() + medio + 1);
+    vector<int> derecha(arr.begin() + medio + 1,
+                        arr.begin() + fin + 1);
+
+    int i = 0, j = 0, k = inicio;
+
+    while (i < izquierda.size() && j < derecha.size()) {
+        comparaciones++;
+
+        if (izquierda[i] <= derecha[j])
+            arr[k++] = izquierda[i++];
+        else
+            arr[k++] = derecha[j++];
+    }
+
+    while (i < izquierda.size())
+        arr[k++] = izquierda[i++];
+
+    while (j < derecha.size())
+        arr[k++] = derecha[j++];
+}
+
+// Mergesort
+void mergeSort(vector<int>& arr, int inicio, int fin,
+               long long& comparaciones) {
+    if (inicio >= fin)
+        return;
+
+    int medio = inicio + (fin - inicio) / 2;
+
+    mergeSort(arr, inicio, medio, comparaciones);
+    mergeSort(arr, medio + 1, fin, comparaciones);
+    mezclar(arr, inicio, medio, fin, comparaciones);
+}
+
+int main() {
+    random_device rd;
+    mt19937 gen(rd());
+    uniform_int_distribution<int> dist(0, 10000000);
+
+    vector<int> tamanos = {
+        1000, 5000, 10000, 20000,
+        50000, 100000, 200000, 500000
+    };
+
+    ofstream archivo("resultados.csv");
+
+    archivo << "n,tiempo_busqueda_us,"
+            << "comparaciones_busqueda,"
+            << "log2_n,tiempo_mergesort_us,"
+            << "comparaciones_mergesort,"
+            << "n_log2_n\n";
+
+    const int REPETICIONES_BUSQUEDA = 10000;
+    const int REPETICIONES_MERGE = 5;
+
+    for (int n : tamanos) {
+        vector<int> original(n);
+
+        for (int& valor : original)
+            valor = dist(gen);
+
+        sort(original.begin(), original.end());
+
+        // Benchmark de busqueda binaria
+        long long comparacionesBusqueda = 0;
+        auto inicioBusqueda = high_resolution_clock::now();
+
+        for (int i = 0; i < REPETICIONES_BUSQUEDA; i++) {
+            int objetivo = original[gen() % n];
+            busquedaBinaria(original, objetivo,
+                            comparacionesBusqueda);
+        }
+
+        auto finBusqueda = high_resolution_clock::now();
+
+        double tiempoBusqueda =
+            duration<double, micro>(finBusqueda - inicioBusqueda).count()
+            / REPETICIONES_BUSQUEDA;
+
+        double promedioComparaciones =
+            static_cast<double>(comparacionesBusqueda)
+            / REPETICIONES_BUSQUEDA;
+
+        // Benchmark de Mergesort
+        double tiempoMergeTotal = 0;
+        long long comparacionesMergeTotal = 0;
+
+        for (int i = 0; i < REPETICIONES_MERGE; i++) {
+            vector<int> copia = original;
+            long long comparaciones = 0;
+
+            auto inicio = high_resolution_clock::now();
+
+            mergeSort(copia, 0, n - 1, comparaciones);
+
+            auto fin = high_resolution_clock::now();
+
+            tiempoMergeTotal +=
+                duration<double, micro>(fin - inicio).count();
+
+            comparacionesMergeTotal += comparaciones;
+        }
+
+        double tiempoMerge =
+            tiempoMergeTotal / REPETICIONES_MERGE;
+
+        double promedioComparacionesMerge =
+            static_cast<double>(comparacionesMergeTotal)
+            / REPETICIONES_MERGE;
+
+        // Funciones teoricas
+        double logN = log2(n);
+        double nLogN = n * logN;
+
+        archivo << n << ","
+                << tiempoBusqueda << ","
+                << promedioComparaciones << ","
+                << logN << ","
+                << tiempoMerge << ","
+                << promedioComparacionesMerge << ","
+                << nLogN << "\n";
+
+        cout << "n = " << n << endl;
+        cout << "Busqueda: " << tiempoBusqueda
+             << " us por busqueda" << endl;
+        cout << "Mergesort: " << tiempoMerge
+             << " us" << endl;
+        cout << "--------------------------" << endl;
+    }
+
+    archivo.close();
+
+    cout << "Resultados guardados en resultados.csv" << endl;
+
+    return 0;
+}
